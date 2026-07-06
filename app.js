@@ -250,22 +250,27 @@ function buildCatchmentLayers(countryId) {
     const demographicRadiusMeters = computeDemographicRadius(populationNearby, minPopulation, maxPopulation, baseRadiusKm);
 
     const hasCompetitors = hasCompetitorsNearby(store, operator.id, baseRadiusKm);
-    const hasOverlap = hasOwnStoresNearby(store, operator.id, 2);
+    const hasOverlap = hasOwnStoresNearby(store, operator.id, baseRadiusKm);
     const populationThresholdLow = minPopulation + (maxPopulation - minPopulation) * 0.25;
     const populationThresholdHigh = minPopulation + (maxPopulation - minPopulation) * 0.75;
 
     let demographicColor = '#999999';
     let viabilityRating = 'Medium - Stable';
+    let cannibalizationText = 'Cannibalization: No';
 
-    if (!hasCompetitors) {
-      demographicColor = '#1a9850';
-      viabilityRating = 'Local monopoly - Strong position';
-    } else if (populationNearby < populationThresholdLow && hasOverlap) {
+    if (populationNearby < populationThresholdLow && hasOverlap) {
       demographicColor = '#d73027';
       viabilityRating = 'Critical - Low pop + cannibalisation';
+      cannibalizationText = 'Cannibalization: Yes';
+    } else if (populationNearby < populationThresholdLow && !hasCompetitors) {
+      demographicColor = '#1a9850';
+      viabilityRating = 'Local monopoly - Strong position';
     } else if (populationNearby < populationThresholdLow && hasCompetitors) {
       demographicColor = '#fc8d59';
       viabilityRating = 'Competitive market - Low pop';
+    } else if (!hasCompetitors) {
+      demographicColor = '#1a9850';
+      viabilityRating = 'Local monopoly - Strong position';
     } else if (populationNearby > populationThresholdHigh) {
       demographicColor = '#1a9850';
       viabilityRating = 'High - Strong market';
@@ -290,9 +295,10 @@ function buildCatchmentLayers(countryId) {
         Nearby population: ${Math.round(populationNearby).toLocaleString()}<br>
         Shared population in overlaps: ${Math.round(sharedPopulationNearby).toLocaleString()}<br>
         Relative size: ${Math.round(demographicRadiusMeters)} m<br>
+        ${cannibalizationText}<br>
         ${hasCompetitors ? `Competitors nearby: Yes<br>` : ''}
         ${hasOverlap ? `Overlapping stores: Yes<br>` : ''}
-        <strong style="color: ${demographicColor}">Viability: ${viabilityRating}</strong>
+        <strong style="color: ${demographicColor}">Situation: ${viabilityRating}</strong>
       </div>
     `, { maxWidth: 320 });
     demographicCircle.addTo(demographicLayer);
