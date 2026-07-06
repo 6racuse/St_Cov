@@ -16,6 +16,7 @@ const state = {
   catchmentMode: 'geographic',
   nearestFilterEnabled: false,
   filterView: 'catchment', // 'none' | 'catchment' | 'nearest'
+  pendingFilterViewFrame: null,
 };
 
 const countrySelect = document.getElementById('countrySelect');
@@ -177,6 +178,25 @@ function hasStoresNearby(storeLocation, radiusKm = 2) {
   return false;
 }
 
+function hasOwnStoresNearby(storeLocation, operatorId, radiusKm = 2) {
+  const radiusMeters = radiusKm * 1000;
+  for (let countryId in MAP_DATA.countries) {
+    const country = MAP_DATA.countries[countryId];
+    for (let op of country.operators) {
+      if (op.id !== operatorId) continue;
+      if (!op.points) continue;
+      for (let point of op.points) {
+        if (point.lat === storeLocation.lat && point.lng === storeLocation.lng) continue;
+        const distanceKm = haversineKm(storeLocation.lat, storeLocation.lng, point.lat, point.lng);
+        if (distanceKm * 1000 < radiusMeters) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
 function buildCatchmentLayers(countryId) {
   const country = MAP_DATA.countries[countryId];
   if (!country) return null;
@@ -197,10 +217,7 @@ function buildCatchmentLayers(countryId) {
     .filter((operator) => operator.id === country.dtBrand)
     .flatMap((operator) => (operator.points || []).map((store) => ({ operator, store })));
 
-  const allStores = (country.operators || [])
-    .flatMap((operator) => (operator.points || []).map((store) => ({ operator, store })));
-
-  const caughtPopulationStats = stores.map(({ store }) => estimateSharedPopulationNearStore(store, allStores, populationPoints, baseRadiusKm));
+  const caughtPopulationStats = stores.map(({ store }) => estimateSharedPopulationNearStore(store, stores, populationPoints, baseRadiusKm));
   const caughtPopulations = caughtPopulationStats.map((item) => item.populationNearby);
   const minPopulation = Math.min(...caughtPopulations, 0);
   const maxPopulation = Math.max(...caughtPopulations, 1);
@@ -210,8 +227,6 @@ function buildCatchmentLayers(countryId) {
 
   stores.forEach(({ operator, store }, index) => {
     const populationNearby = caughtPopulations[index] || 0;
-    const rawPopulationNearby = caughtPopulationStats[index]?.rawPopulationNearby || 0;
-    const allocatedPopulationNearby = caughtPopulationStats[index]?.allocatedPopulationNearby || 0;
     const sharedPopulationNearby = caughtPopulationStats[index]?.sharedPopulation || 0;
     const geographicCircle = L.circle([store.lat, store.lng], {
       radius: baseRadiusKm * 1000,
@@ -235,32 +250,28 @@ function buildCatchmentLayers(countryId) {
     const demographicRadiusMeters = computeDemographicRadius(populationNearby, minPopulation, maxPopulation, baseRadiusKm);
 
     const hasCompetitors = hasCompetitorsNearby(store, operator.id, baseRadiusKm);
-    const hasOverlap = hasStoresNearby(store, 2);
+    const hasOverlap = hasOwnStoresNearby(store, operator.id, 2);
     const populationThresholdLow = minPopulation + (maxPopulation - minPopulation) * 0.25;
     const populationThresholdHigh = minPopulation + (maxPopulation - minPopulation) * 0.75;
-    const overlapRatio = rawPopulationNearby > 0 ? sharedPopulationNearby / rawPopulationNearby : 0;
-    
+
     let demographicColor = '#999999';
     let viabilityRating = 'Medium - Stable';
-    
+
     if (!hasCompetitors) {
       demographicColor = '#1a9850';
       viabilityRating = 'Local monopoly - Strong position';
-    } else if (rawPopulationNearby < populationThresholdLow && hasOverlap) {
+    } else if (populationNearby < populationThresholdLow && hasOverlap) {
       demographicColor = '#d73027';
       viabilityRating = 'Critical - Low pop + cannibalisation';
-    } else if (rawPopulationNearby < populationThresholdLow && hasCompetitors) {
+    } else if (populationNearby < populationThresholdLow && hasCompetitors) {
       demographicColor = '#fc8d59';
       viabilityRating = 'Competitive market - Low pop';
-    } else if (rawPopulationNearby > populationThresholdHigh && overlapRatio < 0.6) {
+    } else if (populationNearby > populationThresholdHigh) {
       demographicColor = '#1a9850';
       viabilityRating = 'High - Strong market';
-    } else if (rawPopulationNearby > populationThresholdHigh && overlapRatio >= 0.6) {
-      demographicColor = '#2b8cbe';
-      viabilityRating = 'Dense market - High potential but shared demand';
     } else {
       demographicColor = '#fee090';
-      viabilityRating = overlapRatio >= 0.6 ? 'Dense market - Balanced demand' : 'Medium - Stable';
+      viabilityRating = 'Medium - Stable';
     }
 
     const demographicCircle = L.circle([store.lat, store.lng], {
@@ -276,11 +287,8 @@ function buildCatchmentLayers(countryId) {
       <div style="min-width:220px">
         <strong>${operator.id}</strong><br>
         Mode: Demographic catchment radius<br>
-        Nearby population (raw): ${Math.round(rawPopulationNearby).toLocaleString()}<br>
-        Nearby population (balanced): ${Math.round(populationNearby).toLocaleString()}<br>
+        Nearby population: ${Math.round(populationNearby).toLocaleString()}<br>
         Shared population in overlaps: ${Math.round(sharedPopulationNearby).toLocaleString()}<br>
-        Overlap ratio: ${Math.round(overlapRatio * 100)}%<br>
-        Allocated population after sharing: ${Math.round(allocatedPopulationNearby).toLocaleString()}<br>
         Relative size: ${Math.round(demographicRadiusMeters)} m<br>
         ${hasCompetitors ? `Competitors nearby: Yes<br>` : ''}
         ${hasOverlap ? `Overlapping stores: Yes<br>` : ''}
@@ -463,27 +471,6 @@ function showCountry(countryId) {
   const layers = buildCountryLayers(countryId);
   if (!country || !layers) return;
 
-  // Only add catchment geojson and related visuals when nearest-filter is NOT active
-  if (!state.nearestFilterEnabled) {
-    addLayer(map, layers.catchmentLayer);
-
-    const heatVisible = state.heatmapVisibility[countryId] === true;
-    setLayerVisible(layers.heatLayer, heatVisible);
-    if (heatmapToggle) {
-      heatmapToggle.checked = heatVisible;
-    }
-
-    refreshCatchmentDisplay(countryId);
-  } else {
-    // When nearest filter is active, ensure catchment visuals are removed
-    removeLayer(map, layers.catchmentLayer);
-    removeLayer(map, layers.catchmentCircleLayers?.geographic);
-    removeLayer(map, layers.catchmentCircleLayers?.demographic);
-    // Also hide heatmap to avoid visual clutter
-    removeLayer(map, layers.heatLayer);
-    if (heatmapToggle) heatmapToggle.checked = false;
-  }
-
   const visibility = state.operatorVisibility[countryId] || {};
   (country.operators || []).forEach((operator) => {
     const visible = visibility[operator.id] !== false;
@@ -507,8 +494,6 @@ function showCountry(countryId) {
       map.fitBounds(bounds.pad(0.08));
     }
   }
-  // Re-apply filter view state when showing a country
-  applyFilterView(countryId);
 }
 
 function renderOperatorList(countryId) {
@@ -560,6 +545,15 @@ function setCountry(countryId) {
   state.currentCountryId = countryId;
   renderOperatorList(countryId);
   showCountry(countryId);
+  if (state.pendingFilterViewFrame !== null) {
+    cancelAnimationFrame(state.pendingFilterViewFrame);
+  }
+  state.pendingFilterViewFrame = requestAnimationFrame(() => {
+    state.pendingFilterViewFrame = null;
+    if (state.currentCountryId === countryId) {
+      applyFilterView(countryId);
+    }
+  });
 }
 
 function initHeatmapToggle() {

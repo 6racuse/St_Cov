@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Telecom Map Europe</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="shell">
+    <main id="map"></main>
+
+    <aside class="panel" aria-label="Country and operator controls">
+      <div class="panel__header">
+        <div class="panel__eyebrow">Telecom Intelligence</div>
+        <h1>Country selection</h1>
+        <p>Choose a country, then show or hide operators with the checkboxes.</p>
+      </div>
+
+      <section class="control-block">
+        <label for="countrySelect" class="control-label">Country</label>
+        <select id="countrySelect" class="country-select"></select>
+      </section>
+
+      <section class="control-block">
+        <div class="section-title">Operators</div>
+        <div id="operatorContainer" class="operator-list"></div>
+      </section>
+
+      <section class="control-block">
+        <div class="section-title">Density overlay</div>
+        <label class="operator-item operator-item--toggle" for="heatmapToggle">
+          <span>
+            <span class="operator-dot operator-dot--heatmap"></span>
+            <span>Population density heatmap</span>
+          </span>
+          <input id="heatmapToggle" type="checkbox" />
+        </label>
+      </section>
+
+      <section class="control-block">
+        <div class="section-title">Catchment filter</div>
+        <div class="switch-group" role="radiogroup" aria-label="Catchment mode">
+          <label class="switch-option">
+            <input type="radio" name="catchmentMode" value="geographic" checked>
+            <span>Geographic catchment radius</span>
+          </label>
+          <label class="switch-option">
+            <input type="radio" name="catchmentMode" value="demographic">
+            <span>Demographic catchment area</span>
+          </label>
+        </div>
+        <div class="nearest-filter" style="margin-top:10px">
+          <div role="radiogroup" aria-label="Filter view">
+            <label class="switch-option">
+              <input type="radio" name="filterView" value="none">
+              <span>Aucun filtre</span>
+            </label>
+            <label class="switch-option">
+              <input type="radio" name="filterView" value="catchment" checked>
+              <span>Filtre Catchment</span>
+            </label>
+            <label class="switch-option">
+              <input type="radio" name="filterView" value="nearest">
+              <span>Nearest-store bubbles (Telekom brands)</span>
+            </label>
+          </div>
+        </div>
+      </section>
+
+
+      <section class="legend-block">
+        <div class="section-title">Legend</div>
+        <div class="legend-row"><span class="legend-dot legend-dot--internal"></span><span>Internal Cannibalization</span></div>
+        <div class="legend-row"><span class="legend-dot legend-dot--low"></span><span>Low Density Zone</span></div>
+        <div class="legend-row"><span class="legend-dot legend-dot--monopoly"></span><span>Local Monopoly</span></div>
+        <div class="legend-row"><span class="legend-dot legend-dot--competitive"></span><span>Competitive Market</span></div>
+      </section>
+
+      <section class="notes-block">
+        <strong>Usage</strong>
+        <ul>
+          <li>Only one country is visible at a time.</li>
+          <li>Operator points can be shown or hidden individually.</li>
+          <li>The heatmap is optional and hidden by default.</li>
+        </ul>
+      </section>
+    </aside>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
